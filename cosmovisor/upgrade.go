@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/otiai10/copy"
 )
 
 // DoUpgrade will be called after the log message has been parsed and the process has terminated.
@@ -60,12 +61,27 @@ func DownloadBinary(cfg *Config, info *UpgradeInfo) error {
 
 	// if this fails, let's see if it is a zipped directory
 	if err != nil {
+		// remove failed binPath
+		err = os.Remove(binPath)
+		if err != nil {
+			return err
+		}
+
 		dirPath := cfg.UpgradeDir(info.Name)
 		err = getter.Get(dirPath, url)
+		if err != nil {
+			return err
+		}
+		err = EnsureBinary(binPath)
+		// copy binary to binPath from dirPath if zipped directory don't contain bin directory to wrap the binary
+		if err != nil {
+			err = copy.Copy(filepath.Join(dirPath, cfg.Name), binPath)
+			if err != nil {
+				return err
+			}
+		}
 	}
-	if err != nil {
-		return err
-	}
+
 	// if it is successful, let's ensure the binary is executable
 	return MarkExecutable(binPath)
 }
@@ -128,8 +144,9 @@ func GetDownloadURL(info *UpgradeInfo) (string, error) {
 		}
 
 		return url, nil
+	} else {
+		fmt.Println(err, doc)
 	}
-
 	return "", errors.New("upgrade info doesn't contain binary map")
 }
 
